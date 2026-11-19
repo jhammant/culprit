@@ -1,4 +1,4 @@
-"""culprit: find what is making your Mac worse.
+"""culprit: find what is making your Mac or Linux machine worse.
 
   culprit trace             who is starting processes, over 30 seconds
   culprit sample            one full sample (CPU, memory, disk, spawns), kept in the history

@@ -1,9 +1,9 @@
 ---
 name: culprit
-description: Keep watch on a Mac and work out what is making it slow, hot or full, using the culprit CLI. Use when the user asks "why is my Mac slow", "why is my load average high", "what is using all the memory", "what keeps filling the disk", "keep an eye on this machine", or wants a recurring check that reports only what changed.
+description: Keep watch on a Mac or a Linux machine and work out what is making it slow, hot or full, using the culprit CLI. Use when the user asks "why is my Mac slow", "why is my load average high", "what is using all the memory", "what keeps filling the disk", "keep an eye on this machine", or wants a recurring check that reports only what changed.
 ---
 
-# culprit: watch a Mac and name what is making it worse
+# culprit: watch a machine and name what is making it worse
 
 You are the watcher. The `culprit` CLI does the measuring; you do the reasoning, the explaining
 and, with consent, the fixing.
@@ -74,9 +74,12 @@ list, stop and ask.
 - **Kernel CPU above 25% with many process starts** is churn: starting and ending processes is
   kernel work. Fix the spawners and the kernel time falls with them.
 - **The load average is not evidence.** On recent macOS it can sit in the hundreds with half the
-  CPU idle. Use CPU shares and starts a second.
-- **`by_program` covers only processes the user can read.** A busy system daemon (Spotlight, the
-  window server) will not be in it; the spawn trace still sees everything.
+  CPU idle, and on Linux it counts tasks waiting for a disk. Use CPU shares and starts a second.
+- **On macOS `by_program` covers only processes the user can read.** A busy system daemon
+  (Spotlight, the window server) will not be in it; the spawn trace still sees everything.
+- **On Linux `by_program` covers every process for CPU and memory**, and only the user's own for
+  disk writes. The spawn trace misses more of the very shortest processes there (a `true`, a
+  `git --version`), so a spawner's rate is a floor, not a count.
 - **Memory footprint includes compressed and swapped pages**, so a program holding 20 GB it has
   not touched for an hour still shows as 20 GB. That is the number that matters for swap.
 - **A burst is not a habit.** One sample over the limit is "watch"; three running is "worse".

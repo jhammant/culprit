@@ -5,17 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "culprit"
 version = "0.1.0"
-description = "Find what is making your Mac worse: who is starting processes, eating memory and filling the disk. No root, no dependencies, and it starts no processes itself."
+description = "Find what is making your Mac or Linux machine worse: who is starting processes, eating memory and filling the disk. No root, no dependencies, and it starts no processes itself."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Jon Hammant" }]
 requires-python = ">=3.9"
 dependencies = []
-keywords = ["macos", "performance", "process", "monitoring", "load-average", "agents"]
+keywords = ["macos", "linux", "performance", "process", "monitoring", "load-average", "agents"]
 classifiers = [
   "Environment :: Console",
   "License :: OSI Approved :: MIT License",
   "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
   "Topic :: System :: Monitoring",
 ]

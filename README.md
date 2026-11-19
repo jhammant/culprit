@@ -1,6 +1,7 @@
 # culprit
 
-Find what is making your Mac worse: who is starting processes, eating memory and filling the disk.
+Find what is making your Mac or Linux machine worse: who is starting processes, eating memory and
+filling the disk.
 
 `top` and Activity Monitor show you what is busy *right now*. They cannot show a process that lives
 for 20 milliseconds, and a few dozen of those a second will take whole cores, most of it kernel
@@ -10,7 +11,7 @@ program that keeps starting them.
 - No root, no dependencies, one small Python package.
 - It starts no processes itself. A monitor that runs `ps` in a loop is part of the problem.
 - Command lines are redacted before they are printed or kept.
-- macOS only (it reads `libproc`).
+- macOS and Linux. It reads the kernel directly: `libproc` on one, `/proc` on the other.
 
 ## Install
 
@@ -112,24 +113,39 @@ and the skill treats a refusal as a stop, but it cannot restrain an agent that i
 
 ## How it works
 
-- **Spawn tracing.** The process table is listed every few milliseconds through
-  `proc_listallpids`. Each new pid is read once for its parent and program, then again while it
-  lives, because a fork looks like its parent until it execs. After the trace, each new process is
-  walked up its parents to the first one that existed when the trace began.
-- **Other users' processes.** `ps` itself is setuid root, so `libproc` will not give its parent to
-  an ordinary user. The kernel's process record (`sysctl kern.proc.pid`) does.
-- **Per-program numbers.** `proc_pid_rusage` gives CPU time, memory footprint (compressed and
-  swapped pages included) and bytes written, read at the start and end of the window.
-- **Machine numbers.** `host_statistics64` for memory and the compressor, `host_statistics` for
-  CPU, `sysctl` for swap and the memory pressure level, `statvfs` for disk.
+- **Spawn tracing.** The process table is listed every few milliseconds: through
+  `proc_listallpids` on macOS, by listing `/proc` on Linux. Each new pid is read once for its
+  parent and program, then again while it lives, because a fork looks like its parent until it
+  execs. After the trace, each new process is walked up its parents to the first one that existed
+  when the trace began.
+- **Other users' processes.** On macOS `ps` itself is setuid root, so `libproc` will not give its
+  parent to an ordinary user. The kernel's process record (`sysctl kern.proc.pid`) does. Linux
+  gives any user every process's parent and command line but keeps the link to its program for
+  the owner, so another user's process is named by the short name the kernel keeps for it
+  (15 characters at most).
+- **Per-program numbers.** On macOS `proc_pid_rusage` gives CPU time, memory footprint (compressed
+  and swapped pages included) and bytes written, read at the start and end of the window. On
+  Linux they come from `/proc/<pid>/stat`, `status` and `io`; memory is what is the process's
+  alone, in RAM or swapped out, so shared libraries and file cache are not charged to anyone.
+- **Machine numbers.** On macOS `host_statistics64` for memory and the compressor,
+  `host_statistics` for CPU, `sysctl` for swap and the memory pressure level, `statvfs` for disk.
+  On Linux `/proc/stat` and `/proc/meminfo`, where free memory is what the kernel could hand out
+  rather than what is empty, and zswap and zram are the compressor. The pressure level is 2 when
+  some task spent a tenth of the last ten seconds waiting for memory and 4 when every task spent
+  a quarter of it (`/proc/pressure/memory`).
 
 ## What it cannot see
 
 - A process that starts and exits between two looks (a few milliseconds) is missed. One whose
   parent has already exited is listed as "parent exited before it could be read", never guessed.
-- CPU, memory and disk writes by program cover the processes your user may read. System daemons
-  (WindowServer, Spotlight, the kernel) are missing from those three lists unless you run culprit
-  with `sudo`. The spawn trace covers every process either way.
+  Linux starts a process in well under a millisecond, so more slip through there: a `true` or a
+  `git --version` is usually missed, a `ps` or a Python script is not.
+- On macOS, CPU, memory and disk writes by program cover the processes your user may read. System
+  daemons (WindowServer, Spotlight, the kernel) are missing from those three lists unless you run
+  culprit with `sudo`. The spawn trace covers every process either way.
+- On Linux, CPU and memory by program cover every process, and disk writes cover your own unless
+  you run culprit with `sudo`. The kernel's own threads are left out. Where `/proc` is mounted
+  with `hidepid`, other users' processes are hidden from all of it.
 - The load average. On recent macOS it can read in the hundreds while half the CPU is idle, so
   culprit reports CPU shares and process starts and leaves it out.
 
@@ -149,7 +165,7 @@ uv run pytest
 ```
 
 The tests cover the attribution, the findings and the redaction with made-up process tables, and
-check the struct offsets against the running kernel on macOS.
+check what is read against the running kernel on macOS and on Linux.
 
 ## Licence
 

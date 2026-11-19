@@ -98,7 +98,7 @@ def diagnose(history: list[dict], limits: dict | None = None) -> list[Finding]:
                 out.append(Finding("watch", f"{name} is using {gb:g} GB more memory than at the last sample.", name,
                                    f"now {now['by_program']['memory_gb'][name]:g} GB"))
     if memory.get("pressure", 1) >= 2:
-        out.append(Finding("worse", "macOS reports memory pressure.", _top(now, "memory_gb", "GB"),
+        out.append(Finding("worse", f"{now.get('os', 'macOS')} reports memory pressure.", _top(now, "memory_gb", "GB"),
                            f"level {memory['pressure']}, swap {memory.get('swap_used_gb'):g} of {memory.get('swap_total_gb'):g} GB"))
 
     # Disk: the fall across the samples, and how long it lasts at that rate.

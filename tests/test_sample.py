@@ -56,3 +56,14 @@ def test_history_is_capped(tmp_path, monkeypatch):
         sample.save({"at": at}, path)
     # Assert
     assert [row["at"] for row in sample.load(path)] == [2, 3, 4]
+
+
+def test_a_program_that_deleted_what_others_wrote_is_still_charged_what_it_wrote_since():
+    # Arrange: its running total is below zero at both readings, and 60 MB higher at the second
+    mb = 2**20
+    before = {1: ("Builder", Usage(1.0, 0, -40 * mb))}
+    after = {1: ("Builder", Usage(1.0, 0, 20 * mb))}
+    # Act
+    got = sample.by_family(before, after, seconds=10.0, cores=8)
+    # Assert
+    assert got["written_mb_per_min"] == {"Builder": 360.0}

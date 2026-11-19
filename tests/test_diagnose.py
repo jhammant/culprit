@@ -66,3 +66,11 @@ def test_memory_pressure_and_a_spawner_that_stopped():
     # Assert: worse first, better last
     assert findings[0].level == "worse" and "memory pressure" in findings[0].what and "Browser.app" in findings[0].suspect
     assert findings[-1].level == "better" and findings[-1].suspect == "python3 poller.py"
+
+
+def test_memory_pressure_is_reported_by_the_system_the_sample_came_from():
+    # Arrange: rows written before samples named their system are from macOS
+    old, linux = sample(600, pressure=2), {**sample(600, pressure=2), "os": "Linux"}
+    # Act / Assert
+    assert diagnose([sample(0), old])[0].what == "macOS reports memory pressure."
+    assert diagnose([sample(0), linux])[0].what == "Linux reports memory pressure."

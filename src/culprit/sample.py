@@ -47,7 +47,8 @@ def _usage(pids) -> dict[int, tuple[str, procs.Usage]]:
 def by_family(before: dict, after: dict, seconds: float, cores: int) -> dict[str, dict[str, float]]:
     """CPU (cores in use), memory (GB) and disk writes (MB a minute) by program, the largest of each.
 
-    Only processes this user may read are in it: run culprit with sudo to see system daemons too.
+    On macOS only processes this user may read are in it: run culprit with sudo to see system
+    daemons too. On Linux every process is, though disk writes are counted for the user's own only.
     """
     cpu, written, memory = collections.Counter(), collections.Counter(), collections.Counter()
     for pid, (name, used) in after.items():
@@ -65,7 +66,7 @@ def by_family(before: dict, after: dict, seconds: float, cores: int) -> dict[str
 
 def take(seconds: float = 30.0) -> dict:
     """Watch the machine for `seconds` and describe it."""
-    procs.require_macos()
+    procs.require_supported()
     ticks = system.cpu_ticks()
     before = _usage(procs.pids())
     base, known, elapsed = tracing.observe(seconds)
@@ -73,7 +74,7 @@ def take(seconds: float = 30.0) -> dict:
     after = _usage(procs.pids())
     memory, disk = system.memory(), system.disk()
     return {
-        "at": round(time.time()), "window_s": round(elapsed, 1),
+        "at": round(time.time()), "window_s": round(elapsed, 1), "os": procs.OS_NAME,
         "cpu": system.cpu_share(ticks, system.cpu_ticks()),
         "memory": vars(memory), "disk": vars(disk), "processes": len(after) or len(known),
         "spawns": {

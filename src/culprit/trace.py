@@ -17,7 +17,8 @@ from . import label, procs
 
 UNREAD = "(gone before it could be read)"
 ORPHAN = "(parent exited before it could be read)"
-SERVICE_MANAGER = 1  # launchd
+KERNEL = "(the kernel)"
+SERVICE_MANAGERS = {"launchd", "systemd", "init"}  # what pid 1 is when it starts scheduled jobs and adopts orphans
 
 
 @dataclass
@@ -86,10 +87,25 @@ def observe(seconds: float, list_pids=procs.pids, read_proc=read, clock=time.mon
 
 
 def attribute(base: dict[int, Proc], known: dict[int, Proc], seconds: float, home: str | None = None,
-              own_pid: int | None = None) -> Trace:
+              own_pid: int | None = None, kernel_parent: int | None = procs.KERNEL_PARENT) -> Trace:
     """Charge every process started during the watch to the long-lived ancestor that caused it."""
     own_pid = os.getpid() if own_pid is None else own_pid
-    new = [proc for pid, proc in known.items() if pid not in base]
+    # Linux lists the kernel's own threads as processes: children of `kernel_parent` with no command line.
+    kernel = lambda proc: kernel_parent is not None and proc.ppid == kernel_parent and not proc.argv
+    new = [proc for pid, proc in known.items() if pid not in base and not kernel(proc)]
+
+    def manager(pid: int, proc: Proc) -> str | None:
+        """What a service manager is called, or None when `proc` is not one. It is pid 1, unless
+        pid 1 is an ordinary program, as it is in a container. BusyBox's init runs as `busybox`
+        and is known by its first argument. On Linux pid 1 also starts each user a systemd of
+        their own, known by its program: any process may call itself `systemd --user`."""
+        if pid == 1:
+            names = ([label.program(proc.path)] if proc.path else []) + [os.path.basename(word) for word in (proc.argv or [])[:1]]
+            return next((name for name in names if name in SERVICE_MANAGERS), None if proc.path else "pid 1")
+        users_own = proc.ppid == 1 and label.program(proc.path) == "systemd" and "--user" in (proc.argv or [])
+        return "systemd" if users_own else None
+
+    managers = {pid: name for pid, name in ((pid, manager(pid, proc)) for pid, proc in base.items()) if name}
 
     def ancestor(proc: Proc) -> int | None:
         seen: set[int] = set()
@@ -121,17 +137,18 @@ def attribute(base: dict[int, Proc], known: dict[int, Proc], seconds: float, hom
     for proc in new:
         by_root[ancestor(proc)].append(proc)
     by_root.pop(own_pid, None)  # nothing culprit starts itself is ever anyone's fault
-    # The service manager starts every scheduled job, so "launchd" names nobody: what it started
-    # is grouped by the job instead, and a job that runs again and again adds up under one name.
+    # A service manager starts every scheduled job, so "launchd" or "systemd" names nobody: what it
+    # started is grouped by the job instead, and a job that runs again and again adds up under one name.
     groups: dict[tuple[str, int | None], list[Proc]] = collections.defaultdict(list)
     for root, children in by_root.items():
         for proc in children:
-            if root == SERVICE_MANAGER:
+            if root in managers:
                 top = job(proc)
-                who = (label.describe(top.path, top.argv, home) if top.path else UNREAD) + " (a job launchd starts)"
+                who = (label.describe(top.path, top.argv, home) if top.path else UNREAD) + f" (a job {managers[root]} starts)"
                 groups[who, None].append(proc)
             else:
-                who = ORPHAN if root is None else described(base[root])
+                started_by_kernel = root is not None and (root == kernel_parent or kernel(base[root]))
+                who = ORPHAN if root is None else KERNEL if started_by_kernel else described(base[root])
                 groups[who, root].append(proc)
     spawners = [Spawner(who=who, pid=pid, count=len(children),
                         programs=dict(collections.Counter(name(c) for c in children).most_common(4)))
@@ -147,6 +164,6 @@ def attribute(base: dict[int, Proc], known: dict[int, Proc], seconds: float, hom
 
 def trace(seconds: float = 30.0) -> Trace:
     """Watch for `seconds` and say who started what."""
-    procs.require_macos()
+    procs.require_supported()
     base, known, elapsed = observe(seconds)
     return attribute(base, known, elapsed)
